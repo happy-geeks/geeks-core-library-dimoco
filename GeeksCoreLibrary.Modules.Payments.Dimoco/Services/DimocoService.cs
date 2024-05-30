@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Data;
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -110,9 +111,10 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
             }
 
             // Collect some data we need.
-            var requestId = Guid.NewGuid().ToString();
-            var emailAddress = userDetails.GetDetailValue(OrderProcessConstants.EmailAddressProperty);
             var firstOrder = conceptOrders.First();
+            var requestId = Guid.NewGuid().ToString();
+            var emailAddress = firstOrder.Main.GetDetailValue(OrderProcessConstants.EmailAddressProperty);
+            var phoneNumber = firstOrder.Main.GetDetailValue(OrderProcessConstants.PhoneNumberProperty);
             var languageCode = firstOrder.Main.GetDetailValue(OrderProcessConstants.LanguageCodeProperty);
             var countryCode = firstOrder.Main.GetDetailValue(OrderProcessConstants.CountryCodeProperty);
 
@@ -134,6 +136,11 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
             if (!String.IsNullOrWhiteSpace(emailAddress))
             {
                 restRequest.AddParameter("shopper", emailAddress, ParameterType.GetOrPost);
+            }
+
+            if (!String.IsNullOrWhiteSpace(phoneNumber))
+            {
+                restRequest.AddParameter("msisdn", phoneNumber, ParameterType.GetOrPost);
             }
 
             if (!String.IsNullOrWhiteSpace(languageCode))
@@ -253,7 +260,10 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
         }
         finally
         {
-            await AddLogEntryAsync(PaymentServiceProviders.Dimoco, invoiceNumber, status, requestFormValues: requestFormValues, responseBody: responseBody, error: error, url: BaseUrl, isIncomingRequest: false);
+            if (dimocoSettings.LogAllRequests)
+            {
+                await AddLogEntryAsync(PaymentServiceProviders.Dimoco, invoiceNumber, status, requestFormValues: requestFormValues, responseBody: responseBody, error: error, url: BaseUrl, isIncomingRequest: false);
+            }
         }
     }
 
@@ -294,7 +304,47 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
             }
 
             var orderIds = webhookData.CustomParameters.FirstOrDefault(p => p.Key == DimocoConstants.OrderIdsParameterName)?.Value;
+            if (String.IsNullOrWhiteSpace(orderIds))
+            {
+                error = "No order IDs found in webhook data.";
+                return new StatusUpdateResult
+                {
+                    Successful = false,
+                    Status = error,
+                    StatusCode = (int)HttpStatusCode.BadRequest
+                };
+            }
 
+            var paymentSuccessful = webhookData.ActionResult.Status == 0;
+            if (!paymentSuccessful)
+            {
+                return new StatusUpdateResult
+                {
+                    Successful = paymentSuccessful,
+                    Status = webhookData.ActionResult.Detail
+                };
+            }
+
+            // Status 4 and 5 mean successful transactions.
+            var successfulTransactions = webhookData.Transactions.Where(t => t.Status is 4 or 5);
+            var totalBilled = successfulTransactions.Sum(t => t.BilledAmount);
+
+            // Check if the total billed amount is equal to the total amount of the order, to make sure we don't accept partial payments.
+            var orders = await shoppingBasketsService.GetOrdersByUniquePaymentNumberAsync(invoiceNumber);
+            var totalAmount = 0M;
+            var basketSettings = await shoppingBasketsService.GetSettingsAsync();
+            foreach (var (order, lines) in orders)
+            {
+                totalAmount += await shoppingBasketsService.GetPriceAsync(order, lines, basketSettings);
+            }
+
+            paymentSuccessful = totalBilled >= totalAmount;
+
+            return new StatusUpdateResult
+            {
+                Successful = paymentSuccessful,
+                Status = webhookData.ActionResult.Detail
+            };
         }
         catch (Exception exception)
         {
@@ -310,7 +360,7 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
         }
         finally
         {
-            await LogIncomingPaymentActionAsync(PaymentServiceProviders.Dimoco, invoiceNumber, statusCode, responseBody: webHookContents, error: error);
+            await LogIncomingPaymentActionAsync(PaymentServiceProviders.Dimoco, invoiceNumber, statusCode, error: error);
         }
     }
 
@@ -327,7 +377,9 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
                          dimocoClientSecretLive.`value` AS dimocoClientSecretLive,
                          dimocoClientSecretTest.`value` AS dimocoClientSecretTest,
                          dimocoMerchantLogoUrlLive.`value` AS dimocoMerchantLogoUrlLive,
-                         dimocoMerchantLogoUrlTest.`value` AS dimocoMerchantLogoUrlTest
+                         dimocoMerchantLogoUrlTest.`value` AS dimocoMerchantLogoUrlTest,
+                         dimocoServiceNameLive.`value` AS dimocoServiceNameLive,
+                         dimocoServiceNameTest.`value` AS dimocoServiceNameTest
                      FROM {WiserTableNames.WiserItem} AS paymentServiceProvider
                      LEFT JOIN {WiserTableNames.WiserItemDetail} AS dimocoMerchantIdLive ON dimocoMerchantIdLive.item_id = paymentServiceProvider.id AND dimocoMerchantIdLive.`key` = '{DimocoConstants.DimocoMerchantIdLiveProperty}'
                      LEFT JOIN {WiserTableNames.WiserItemDetail} AS dimocoMerchantIdTest ON dimocoMerchantIdTest.item_id = paymentServiceProvider.id AND dimocoMerchantIdTest.`key` = '{DimocoConstants.DimocoMerchantIdTestProperty}'
@@ -337,6 +389,8 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
                      LEFT JOIN {WiserTableNames.WiserItemDetail} AS dimocoClientSecretTest ON dimocoClientSecretTest.item_id = paymentServiceProvider.id AND dimocoClientSecretTest.`key` = '{DimocoConstants.DimocoClientSecretTestProperty}'
                      LEFT JOIN {WiserTableNames.WiserItemDetail} AS dimocoMerchantLogoUrlLive ON dimocoMerchantLogoUrlLive.item_id = paymentServiceProvider.id AND dimocoMerchantLogoUrlLive.`key` = '{DimocoConstants.DimocoMerchantLogoUrlLiveProperty}'
                      LEFT JOIN {WiserTableNames.WiserItemDetail} AS dimocoMerchantLogoUrlTest ON dimocoMerchantLogoUrlTest.item_id = paymentServiceProvider.id AND dimocoMerchantLogoUrlTest.`key` = '{DimocoConstants.DimocoMerchantLogoUrlTestProperty}'
+                     LEFT JOIN {WiserTableNames.WiserItemDetail} AS dimocoServiceNameLive ON dimocoServiceNameLive.item_id = paymentServiceProvider.id AND dimocoServiceNameLive.`key` = '{DimocoConstants.DimocoServiceNameLiveProperty}'
+                     LEFT JOIN {WiserTableNames.WiserItemDetail} AS dimocoServiceNameTest ON dimocoServiceNameTest.item_id = paymentServiceProvider.id AND dimocoServiceNameTest.`key` = '{DimocoConstants.DimocoServiceNameTestProperty}'
                      WHERE paymentServiceProvider.id = ?id
                      """;
 
@@ -360,7 +414,8 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
         result.MerchantId = row.GetAndDecryptSecretKey($"dimocoMerchantId{suffix}");
         result.OrderId = row.GetAndDecryptSecretKey($"dimocoOrderId{suffix}");
         result.ClientSecret = row.GetAndDecryptSecretKey($"dimocoClientSecret{suffix}");
-        result.LogoUrl = row.GetAndDecryptSecretKey($"dimocoMerchantLogoUrl{suffix}");
+        result.LogoUrl = row.Field<string>($"dimocoMerchantLogoUrl{suffix}")!;
+        result.ServiceName = row.Field<string>($"dimocoServiceName{suffix}")!;
         return result;
     }
 
