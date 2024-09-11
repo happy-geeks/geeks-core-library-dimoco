@@ -102,7 +102,6 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
                 };
             }
 
-
             var totalPrice = 0M;
             var basketSettings = await shoppingBasketsService.GetSettingsAsync();
             foreach (var conceptOrder in conceptOrders)
@@ -127,9 +126,9 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
             restRequest.AddParameter("action", DimocoConstants.StartPaymentTransactionAction, ParameterType.GetOrPost);
             restRequest.AddParameter("request_id", requestId, ParameterType.GetOrPost);
             restRequest.AddParameter("url_callback", dimocoSettings.WebhookUrl, ParameterType.GetOrPost);
-            restRequest.AddParameter("url_return", dimocoSettings.SuccessUrl, ParameterType.GetOrPost);
+            restRequest.AddParameter("url_return", dimocoSettings.ReturnUrl, ParameterType.GetOrPost);
             restRequest.AddParameter("service_name", dimocoSettings.ServiceName, ParameterType.GetOrPost);
-            restRequest.AddParameter("amount", totalPrice.ToString(new CultureInfo("en-US")), ParameterType.GetOrPost);
+            restRequest.AddParameter("amount", Math.Round(totalPrice, 2).ToString(new CultureInfo("en-US")), ParameterType.GetOrPost);
             restRequest.AddParameter(DimocoConstants.OrderIdsParameterName, String.Join(",", conceptOrders.Select(o => o.Main.Id)), ParameterType.GetOrPost);
             restRequest.AddParameter(DimocoConstants.InvoiceNumberParameterName, invoiceNumber, ParameterType.GetOrPost);
 
@@ -362,6 +361,36 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
         {
             await LogIncomingPaymentActionAsync(PaymentServiceProviders.Dimoco, invoiceNumber, statusCode, error: error);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<PaymentReturnResult> HandlePaymentReturnAsync(OrderProcessSettingsModel orderProcessSettings, PaymentMethodSettingsModel paymentMethodSettings)
+    {
+        invoiceNumber = HttpContextHelpers.GetRequestValue(httpContextAccessor?.HttpContext, DimocoConstants.WebhookInvoiceNumberProperty);
+
+        var orders = await shoppingBasketsService.GetOrdersByUniquePaymentNumberAsync(invoiceNumber);
+        if (orders == null || orders.Count == 0)
+        {
+            await LogIncomingPaymentActionAsync(PaymentServiceProviders.Dimoco, invoiceNumber, 0, error: $"Unknown invoice number: {invoiceNumber}");
+
+            // Unknown invoice number.
+            return new PaymentReturnResult
+            {
+                Action = PaymentResultActions.Redirect,
+                ActionData = paymentMethodSettings.PaymentServiceProvider.FailUrl
+            };
+        }
+
+        await LogIncomingPaymentActionAsync(PaymentServiceProviders.Dimoco, invoiceNumber, 200);
+
+        var paymentWasSuccessful = orders.All(order => order.Order.GetDetailValue<bool>(OrderProcessConstants.PaymentCompleteProperty));
+        var redirectUrl = paymentWasSuccessful ? paymentMethodSettings.PaymentServiceProvider.SuccessUrl : paymentMethodSettings.PaymentServiceProvider.FailUrl;
+
+        return new PaymentReturnResult
+        {
+            Action = PaymentResultActions.Redirect,
+            ActionData = redirectUrl
+        };
     }
 
     /// <inheritdoc />

@@ -18,6 +18,7 @@ public class Constants
 
     public const string WebhookDataProperty = "data";
     public const string WebhookSignatureProperty = "digest";
+    public const string WebhookInvoiceNumberProperty = "invoice_number";
     public const string DimocoServiceNameLiveProperty = "dimocoServiceNameLive";
     public const string DimocoServiceNameTestProperty = "dimocoServiceNameTest";
 }
