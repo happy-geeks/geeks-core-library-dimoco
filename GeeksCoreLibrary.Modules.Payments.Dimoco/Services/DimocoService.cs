@@ -76,7 +76,7 @@ public class DimocoService(
                 invalidSettings.Add(nameof(dimocoSettings.ClientSecret));
             }
 
-            if (invalidSettings.Any())
+            if (invalidSettings.Count != 0)
             {
                 logger.LogError($"Validation in '{nameof(HandlePaymentRequestAsync)}' of '{nameof(DimocoService)}' failed because the following required settings do not have a (valid) value: {String.Join(", ", invalidSettings)}.");
                 return new PaymentRequestResult
