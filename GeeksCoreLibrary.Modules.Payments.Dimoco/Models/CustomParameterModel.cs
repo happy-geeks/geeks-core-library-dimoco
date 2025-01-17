@@ -12,11 +12,11 @@ public class CustomParameterModel
     /// Name of custom parameter passed to the API call.
     /// </summary>
     [XmlElement("key")]
-    public string Key { get; set; }
+    public string? Key { get; set; }
 
     /// <summary>
     /// Value of custom parameter passed to the API call.
     /// </summary>
     [XmlElement("value")]
-    public string Value { get; set; }
+    public string? Value { get; set; }
 }

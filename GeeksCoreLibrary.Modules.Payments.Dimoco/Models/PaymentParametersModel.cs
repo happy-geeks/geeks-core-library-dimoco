@@ -12,11 +12,11 @@ public class PaymentParametersModel
     /// End user authorization technique – one of web, wap or sms.
     /// </summary>
     [XmlElement("channel")]
-    public string Channel { get; set; }
+    public string? Channel { get; set; }
 
     /// <summary>
     /// Payment method used – one of OPERATOR or ISP.
     /// </summary>
     [XmlElement("method")]
-    public string Method { get; set; }
+    public string? Method { get; set; }
 }

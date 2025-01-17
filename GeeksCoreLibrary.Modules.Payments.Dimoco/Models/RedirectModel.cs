@@ -12,5 +12,5 @@ public class RedirectModel
     /// The URL to redirect the user to.
     /// </summary>
     [XmlElement("url")]
-    public string Url { get; set; }
+    public string? Url { get; set; }
 }

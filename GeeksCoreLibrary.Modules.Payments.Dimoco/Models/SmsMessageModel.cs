@@ -12,5 +12,5 @@ public class SmsMessageModel
     /// Id of billing SMS.
     /// </summary>
     [XmlElement("id")]
-    public string Id { get; set; }
+    public string? Id { get; set; }
 }

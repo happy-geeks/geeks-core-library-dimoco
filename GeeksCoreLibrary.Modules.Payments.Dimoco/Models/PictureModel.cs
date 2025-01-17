@@ -11,11 +11,11 @@ public class PictureModel
     /// The URL of the product picture.
     /// </summary>
     [JsonProperty("img")]
-    public string Url { get; set; }
+    public string? Url { get; set; }
 
     /// <summary>
     /// The alt text of the product picture.
     /// </summary>
     [JsonProperty("alt")]
-    public string AltText { get; set; }
+    public string? AltText { get; set; }
 }

@@ -13,7 +13,6 @@ using GeeksCoreLibrary.Core.Helpers;
 using GeeksCoreLibrary.Core.Interfaces;
 using GeeksCoreLibrary.Core.Models;
 using GeeksCoreLibrary.Modules.Databases.Interfaces;
-using GeeksCoreLibrary.Modules.Objects.Interfaces;
 using GeeksCoreLibrary.Modules.Payments.Enums;
 using GeeksCoreLibrary.Modules.Payments.Interfaces;
 using GeeksCoreLibrary.Modules.Payments.Models;
@@ -30,39 +29,25 @@ using DimocoConstants = GeeksCoreLibrary.Modules.Payments.Dimoco.Models.Constant
 namespace GeeksCoreLibrary.Modules.Payments.Dimoco.Services;
 
 /// <inheritdoc cref="IPaymentServiceProviderService" />
-public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceProviderService, IScopedService
+public class DimocoService(
+    IDatabaseHelpersService databaseHelpersService,
+    IDatabaseConnection databaseConnection,
+    ILogger<PaymentServiceProviderBaseService> logger,
+    IOptions<GclSettings> gclSettings,
+    IShoppingBasketsService shoppingBasketsService,
+    IWiserItemsService wiserItemsService,
+    IHttpContextAccessor? httpContextAccessor = null)
+    : PaymentServiceProviderBaseService(databaseHelpersService, databaseConnection, logger, httpContextAccessor), IPaymentServiceProviderService, IScopedService
 {
     private const string BaseUrl = "https://services.dimoco.at/smart/payment";
-    private readonly IDatabaseConnection databaseConnection;
-    private readonly ILogger<PaymentServiceProviderBaseService> logger;
-    private readonly IHttpContextAccessor httpContextAccessor;
-    private readonly GclSettings gclSettings;
-    private readonly IShoppingBasketsService shoppingBasketsService;
-    private readonly IWiserItemsService wiserItemsService;
-    private readonly IObjectsService objectsService;
+    private readonly IDatabaseConnection databaseConnection = databaseConnection;
+    private readonly ILogger<PaymentServiceProviderBaseService> logger = logger;
+    private readonly IHttpContextAccessor? httpContextAccessor = httpContextAccessor;
+    private readonly GclSettings gclSettings = gclSettings.Value;
 
-    private string webHookContents = null;
-    private ApiResultModel webhookData = null;
-    private string? invoiceNumber = null;
-
-    public DimocoService(
-        IDatabaseHelpersService databaseHelpersService,
-        IDatabaseConnection databaseConnection,
-        ILogger<PaymentServiceProviderBaseService> logger,
-        IOptions<GclSettings> gclSettings,
-        IShoppingBasketsService shoppingBasketsService,
-        IWiserItemsService wiserItemsService,
-        IObjectsService objectsService,
-        IHttpContextAccessor httpContextAccessor = null) : base(databaseHelpersService, databaseConnection, logger, httpContextAccessor)
-    {
-        this.databaseConnection = databaseConnection;
-        this.logger = logger;
-        this.shoppingBasketsService = shoppingBasketsService;
-        this.wiserItemsService = wiserItemsService;
-        this.objectsService = objectsService;
-        this.gclSettings = gclSettings.Value;
-        this.httpContextAccessor = httpContextAccessor;
-    }
+    private string? webHookContents;
+    private ApiResultModel? webhookData;
+    private string? invoiceNumber;
 
     /// <inheritdoc />
     public async Task<PaymentRequestResult> HandlePaymentRequestAsync(ICollection<(WiserItemModel Main, List<WiserItemModel> Lines)> conceptOrders, WiserItemModel userDetails, PaymentMethodSettingsModel paymentMethodSettings, string invoiceNumber)
@@ -121,13 +106,13 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
             var restClient = new RestClient(new RestClientOptions(BaseUrl));
             var restRequest = new RestRequest("", Method.Post);
 
-            restRequest.AddParameter("merchant", dimocoSettings.MerchantId, ParameterType.GetOrPost);
-            restRequest.AddParameter("order", dimocoSettings.OrderId, ParameterType.GetOrPost);
+            restRequest.AddParameter("merchant", dimocoSettings.MerchantId ?? String.Empty, ParameterType.GetOrPost);
+            restRequest.AddParameter("order", dimocoSettings.OrderId ?? String.Empty, ParameterType.GetOrPost);
             restRequest.AddParameter("action", DimocoConstants.StartPaymentTransactionAction, ParameterType.GetOrPost);
             restRequest.AddParameter("request_id", requestId, ParameterType.GetOrPost);
             restRequest.AddParameter("url_callback", dimocoSettings.WebhookUrl, ParameterType.GetOrPost);
             restRequest.AddParameter("url_return", dimocoSettings.ReturnUrl, ParameterType.GetOrPost);
-            restRequest.AddParameter("service_name", dimocoSettings.ServiceName, ParameterType.GetOrPost);
+            restRequest.AddParameter("service_name", dimocoSettings.ServiceName ?? String.Empty, ParameterType.GetOrPost);
             restRequest.AddParameter("amount", Math.Round(totalPrice, 2).ToString(new CultureInfo("en-US")), ParameterType.GetOrPost);
             restRequest.AddParameter(DimocoConstants.OrderIdsParameterName, String.Join(",", conceptOrders.Select(o => o.Main.Id)), ParameterType.GetOrPost);
             restRequest.AddParameter(DimocoConstants.InvoiceNumberParameterName, invoiceNumber, ParameterType.GetOrPost);
@@ -188,7 +173,7 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
             }
 
             var payload = String.Join("", restRequest.Parameters.Where(p => p.Type == ParameterType.GetOrPost).OrderBy(p => p.Name).Select(p => p.Value));
-            using var hmacSha256 = new HMACSHA256(Encoding.UTF8.GetBytes(dimocoSettings.ClientSecret));
+            using var hmacSha256 = new HMACSHA256(Encoding.UTF8.GetBytes(dimocoSettings.ClientSecret!));
             var signature = Convert.ToHexString(hmacSha256.ComputeHash(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
             restRequest.AddParameter("digest", signature, ParameterType.GetOrPost);
 
@@ -196,7 +181,7 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
 
             var restResponse = await restClient.ExecuteAsync(restRequest);
             responseBody = restResponse.Content;
-            status = (int)restResponse.StatusCode;
+            status = (int) restResponse.StatusCode;
 
             if (restResponse.StatusCode != HttpStatusCode.OK && restResponse.StatusCode != HttpStatusCode.Created && restResponse.StatusCode != HttpStatusCode.NoContent)
             {
@@ -272,61 +257,64 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
         var dimocoSettings = (DimocoSettingsModel) paymentMethodSettings.PaymentServiceProvider;
         var error = "";
         var statusCode = 0;
-        var responseBody = "";
+
         try
         {
             if (httpContextAccessor?.HttpContext == null)
             {
                 error = "No HTTP context available; unable to process status update.";
+                statusCode = (int) HttpStatusCode.InternalServerError;
                 return new StatusUpdateResult
                 {
                     Successful = false,
                     Status = error,
-                    StatusCode = (int)HttpStatusCode.InternalServerError
+                    StatusCode = statusCode
                 };
             }
 
             // Validate the signature of the webhook.
             var signature = httpContextAccessor.HttpContext.Request.Form[DimocoConstants.WebhookSignatureProperty].ToString();
-            using var hmacSha256 = new HMACSHA256(Encoding.UTF8.GetBytes(dimocoSettings.ClientSecret));
-            var hash = hmacSha256.ComputeHash(Encoding.UTF8.GetBytes(webHookContents));
+            using var hmacSha256 = new HMACSHA256(Encoding.UTF8.GetBytes(dimocoSettings.ClientSecret!));
+            var hash = hmacSha256.ComputeHash(Encoding.UTF8.GetBytes(webHookContents!));
             var hashString = Convert.ToHexString(hash);
             if (!String.Equals(hashString, signature, StringComparison.OrdinalIgnoreCase))
             {
                 error = "Invalid signature.";
+                statusCode = (int) HttpStatusCode.BadRequest;
                 return new StatusUpdateResult
                 {
                     Successful = false,
                     Status = error,
-                    StatusCode = (int)HttpStatusCode.BadRequest
+                    StatusCode = statusCode
                 };
             }
 
-            var orderIds = webhookData.CustomParameters.FirstOrDefault(p => p.Key == DimocoConstants.OrderIdsParameterName)?.Value;
+            var orderIds = webhookData?.CustomParameters.FirstOrDefault(p => p.Key == DimocoConstants.OrderIdsParameterName)?.Value;
             if (String.IsNullOrWhiteSpace(orderIds))
             {
                 error = "No order IDs found in webhook data.";
+                statusCode = (int) HttpStatusCode.BadRequest;
                 return new StatusUpdateResult
                 {
                     Successful = false,
                     Status = error,
-                    StatusCode = (int)HttpStatusCode.BadRequest
+                    StatusCode = statusCode
                 };
             }
 
-            var paymentSuccessful = webhookData.ActionResult.Status == 0;
+            var paymentSuccessful = webhookData?.ActionResult.Status == 0;
             if (!paymentSuccessful)
             {
                 return new StatusUpdateResult
                 {
                     Successful = paymentSuccessful,
-                    Status = webhookData.ActionResult.Detail
+                    Status = webhookData?.ActionResult.Detail
                 };
             }
 
             // Status 4 and 5 mean successful transactions.
-            var successfulTransactions = webhookData.Transactions.Where(t => t.Status is 4 or 5);
-            var totalBilled = successfulTransactions.Sum(t => t.BilledAmount);
+            var successfulTransactions = webhookData?.Transactions.Where(t => t.Status is 4 or 5);
+            var totalBilled = successfulTransactions?.Sum(t => t.BilledAmount);
 
             // Check if the total billed amount is equal to the total amount of the order, to make sure we don't accept partial payments.
             var orders = await shoppingBasketsService.GetOrdersByUniquePaymentNumberAsync(invoiceNumber);
@@ -342,7 +330,7 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
             return new StatusUpdateResult
             {
                 Successful = paymentSuccessful,
-                Status = webhookData.ActionResult.Detail
+                Status = webhookData?.ActionResult.Detail
             };
         }
         catch (Exception exception)
@@ -350,11 +338,12 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
             error = exception.ToString();
             // Log any exceptions that may have occurred.
             logger.LogError(exception, "Error processing Dimoco payment update.");
+            statusCode = (int) HttpStatusCode.InternalServerError;
             return new StatusUpdateResult
             {
                 Successful = false,
                 Status = "Error processing PayPal payment Dimoco.",
-                StatusCode = 500
+                StatusCode = statusCode
             };
         }
         finally
@@ -437,6 +426,7 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
         {
             return result;
         }
+
         var row = dataTable.Rows[0];
 
         var suffix = gclSettings.Environment.InList(Environments.Development, Environments.Test) ? "Test" : "Live";
@@ -453,7 +443,7 @@ public class DimocoService : PaymentServiceProviderBaseService, IPaymentServiceP
     {
         try
         {
-            if (httpContextAccessor.HttpContext?.Request.Form == null)
+            if (httpContextAccessor?.HttpContext?.Request.Form == null)
             {
                 throw new Exception("No HTTP context available.");
             }

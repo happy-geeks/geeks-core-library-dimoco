@@ -24,16 +24,16 @@ public class TransactionModel
     /// Currency of billing transaction (ISO 4271 alphabetic code).
     /// </summary>
     [XmlElement("currency")]
-    public string Currency { get; set; }
+    public string? Currency { get; set; }
 
     /// <summary>
     /// Id of billing transaction.
     /// </summary>
     [XmlElement("id")]
-    public string Id { get; set; }
+    public string? Id { get; set; }
 
     [XmlElement("sms_message")]
-    public SmsMessageModel SmsMessage { get; set; }
+    public SmsMessageModel SmsMessage { get; set; } = new();
 
     /// <summary>
     /// Status of the payment transaction.

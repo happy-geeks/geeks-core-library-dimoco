@@ -12,11 +12,11 @@ public class AdditionalResultModel
     /// Name of additional dynamic return parameter.
     /// </summary>
     [XmlElement("key")]
-    public string Key { get; set; }
+    public string? Key { get; set; }
 
     /// <summary>
     /// Value of additional dynamic return parameter.
     /// </summary>
     [XmlElement("value")]
-    public string Value { get; set; }
+    public string? Value { get; set; }
 }

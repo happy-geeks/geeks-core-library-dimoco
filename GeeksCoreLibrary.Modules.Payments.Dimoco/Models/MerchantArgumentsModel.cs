@@ -11,5 +11,5 @@ public class MerchantArgumentsModel
     /// The image of the company logo.
     /// </summary>
     [JsonProperty("logo")]
-    public PictureModel Logo { get; set; }
+    public PictureModel Logo { get; set; } = new();
 }

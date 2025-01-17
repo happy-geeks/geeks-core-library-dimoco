@@ -1,5 +1,4 @@
 ﻿using System.Xml.Serialization;
-using GeeksCoreLibrary.Modules.Redirect.Models;
 
 namespace GeeksCoreLibrary.Modules.Payments.Dimoco.Models;
 
@@ -15,28 +14,28 @@ public class ActionResultModel
     /// Used in webhooks and API responses.
     /// </summary>
     [XmlElement("code")]
-    public string Code { get; set; }
+    public string? Code { get; set; }
 
     /// <summary>
     /// Verbose description of the status.
     /// Used in webhooks and API responses.
     /// </summary>
     [XmlElement("detail")]
-    public string Detail { get; set; }
+    public string? Detail { get; set; }
 
     /// <summary>
     /// Error code and/or error description from PSP.
     /// Only used in webhooks.
     /// </summary>
     [XmlElement("detail_psp")]
-    public string DetailPsp { get; set; }
+    public string? DetailPsp { get; set; }
 
     /// <summary>
     /// URL where the end user shall be redirected (only present with status 3).
     /// Only used in API responses.
     /// </summary>
     [XmlElement("redirect")]
-    public RedirectModel Redirect { get; set; }
+    public RedirectModel Redirect { get; set; } = new();
 
     /// <summary>
     /// 0 = success,

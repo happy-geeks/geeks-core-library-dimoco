@@ -1,7 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+    <ItemGroup>
+        <ProjectReference Include="..\..\GeeksCoreLibrary\GeeksCoreLibrary\GeeksCoreLibrary.csproj"/>
+    </ItemGroup>
+
     <PropertyGroup>
-        <TargetFramework>net7.0</TargetFramework>
+        <TargetFramework>net9.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <Authors>Happy Horizon B.V.</Authors>
@@ -9,10 +13,6 @@
         <AssemblyVersion>1.0.0.0</AssemblyVersion>
         <FileVersion>1.0.0.0</FileVersion>
     </PropertyGroup>
-
-    <ItemGroup>
-      <PackageReference Include="GeeksCoreLibrary" Version="4.2.19" />
-    </ItemGroup>
 
 
 </Project>

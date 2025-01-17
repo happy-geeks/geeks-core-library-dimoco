@@ -11,11 +11,11 @@ public class ProductArgumentsModel
     /// The image of the product.
     /// </summary>
     [JsonProperty("pic")]
-    public PictureModel Picture { get; set; }
+    public PictureModel Picture { get; set; } = new();
 
     /// <summary>
     /// The description of the product. Key should be the language code and value the description in that language.
     /// </summary>
     [JsonProperty("desc")]
-    public Dictionary<string, string> Description { get; set; }
+    public Dictionary<string, string> Description { get; set; } = new();
 }
