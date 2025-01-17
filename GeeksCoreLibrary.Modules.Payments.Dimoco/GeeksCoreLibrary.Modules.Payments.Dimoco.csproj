@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <Authors>Happy Horizon B.V.</Authors>
+        <Description>Dimoco plugin for the order process of the GeeksCoreLibrary.</Description>
+        <AssemblyVersion>1.0.0.0</AssemblyVersion>
+        <FileVersion>1.0.0.0</FileVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="GeeksCoreLibrary" Version="5.0.2501.1" />
+    </ItemGroup>
+
+
+</Project>
