@@ -11,7 +11,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="GeeksCoreLibrary" Version="5.0.2501.1" />
+      <PackageReference Include="GeeksCoreLibrary" Version="5.0.2501.2" />
     </ItemGroup>
 
 
